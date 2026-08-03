@@ -21,6 +21,7 @@ import {
   IconSidebarConfig,
   IconSidebarDashboard,
   IconSidebarLogs,
+  IconFileText,
   IconSidebarOauth,
   IconSidebarPlugins,
   IconSidebarProviders,
@@ -28,6 +29,7 @@ import {
   IconSidebarQuota,
   IconSidebarStore,
   IconSidebarSystem,
+  IconShield,
   IconChevronDown,
 } from '@/components/ui/icons';
 import { INLINE_LOGO_JPEG } from '@/assets/logoInline';
@@ -62,6 +64,8 @@ const sidebarIcons: Record<string, ReactNode> = {
   pluginStore: <IconSidebarStore size={18} />,
   config: <IconSidebarConfig size={18} />,
   logs: <IconSidebarLogs size={18} />,
+  llmRequestLogs: <IconFileText size={18} />,
+  grokInspection: <IconShield size={18} />,
   system: <IconSidebarSystem size={18} />,
 };
 
@@ -649,6 +653,18 @@ export function MainLayout() {
           labelKey: 'nav.logs',
           metaKey: 'nav_meta.logs',
           icon: sidebarIcons.logs,
+        },
+        {
+          path: '/llm-request-logs',
+          labelKey: 'nav.llm_request_logs',
+          metaKey: 'nav_meta.llm_request_logs',
+          icon: sidebarIcons.llmRequestLogs,
+        },
+        {
+          path: '/grok-inspection',
+          labelKey: 'nav.grok_inspection',
+          metaKey: 'nav_meta.grok_inspection',
+          icon: sidebarIcons.grokInspection,
         },
       ],
     },

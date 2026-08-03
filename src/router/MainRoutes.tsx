@@ -11,6 +11,8 @@ import { PluginsPage } from '@/features/plugins/PluginsPage';
 import { PluginStorePage } from '@/features/plugins/PluginStorePage';
 import { ConfigPage } from '@/pages/ConfigPage';
 import { LogsPage } from '@/pages/LogsPage';
+import { LLMRequestLogsPage } from '@/pages/LLMRequestLogsPage';
+import { GrokInspectionPage } from '@/pages/GrokInspectionPage';
 import { SystemPage } from '@/pages/SystemPage';
 import { useAuthStore } from '@/stores';
 
@@ -42,6 +44,8 @@ const createMainRoutes = (supportsPlugin: boolean) => [
       ]),
   { path: '/config', element: <ConfigPage /> },
   { path: '/logs', element: <LogsPage /> },
+  { path: '/llm-request-logs', element: <LLMRequestLogsPage /> },
+  { path: '/grok-inspection', element: <GrokInspectionPage /> },
   { path: '/system', element: <SystemPage /> },
   { path: '*', element: <Navigate to="/" replace /> },
 ];
