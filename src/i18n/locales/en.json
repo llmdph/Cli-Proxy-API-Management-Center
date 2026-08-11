@@ -265,7 +265,19 @@
     "unban_filter_confirm": "Unban {{count}} account(s) in \"{{filter}}\"?",
     "unban_all_confirm": "Unban all {{count}} account(s) in the ban pool?",
     "unban_filter_started": "Category unban started: {{count}}",
-    "unban_all_started": "Unban all started"
+    "unban_all_started": "Unban all started",
+    "filter_uninspected": "Uninspected",
+    "search": "Search",
+    "search_placeholder": "email / file / auth_index",
+    "time_sort": "Sort by time",
+    "time_sort_newest": "Newest first",
+    "time_sort_oldest": "Oldest first",
+    "col_time": "Time",
+    "filtered_count": "{{count}} shown",
+    "sync_uninspected": "Sync uninspected",
+    "sync_uninspected_added": "Imported {{count}} uninspected account(s)",
+    "sync_uninspected_none": "No new uninspected accounts",
+    "sync_uninspected_error": "Failed to sync uninspected accounts"
   },
   "llm_request_logs": {
     "title": "LLM Request Logs",

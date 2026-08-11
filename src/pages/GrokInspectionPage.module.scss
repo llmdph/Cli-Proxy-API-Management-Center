@@ -171,3 +171,15 @@
   color: var(--warning-color, #d97706);
   font-size: 12px;
 }
+
+
+.searchInput {
+  width: min(320px, 48vw);
+  height: 32px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  padding: 0 10px;
+  font-size: 13px;
+}

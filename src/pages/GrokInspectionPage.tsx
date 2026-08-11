@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -31,6 +31,7 @@ const WORKERS_DEFAULT = 6;
 
 const FILTERS = [
   'all',
+  'uninspected',
   'healthy',
   'permission_denied',
   'quota_exhausted',
@@ -39,6 +40,34 @@ const FILTERS = [
   'no_think_stream',
   'other',
 ] as const;
+
+type TimeSort = 'newest' | 'oldest';
+
+const rowTimeMs = (row: GrokAccountResult) => {
+  const probed = Date.parse(String(row.probed_at || ''));
+  if (Number.isFinite(probed) && probed > 0) return probed;
+  const mod = Number(row.file_mod_unix || 0);
+  if (Number.isFinite(mod) && mod > 0) return mod * 1000;
+  return 0;
+};
+
+const formatProbedAt = (row: GrokAccountResult) => {
+  const ms = rowTimeMs(row);
+  if (!ms) return '—';
+  try {
+    return new Date(ms).toLocaleString();
+  } catch {
+    return row.probed_at || '—';
+  }
+};
+
+const rowMatchesSearch = (row: GrokAccountResult, q: string) => {
+  if (!q) return true;
+  const hay = [row.name, row.email, row.file_name, row.auth_index, row.reason, row.classification]
+    .map((v) => String(v || '').toLowerCase())
+    .join('\n');
+  return hay.includes(q);
+};
 
 const rowKey = (row: GrokAccountResult) =>
   row.auth_index || row.file_name || row.name || row.email || '';
@@ -54,6 +83,7 @@ const classificationTone = (value: string) => {
   if (value === 'quota_exhausted' || value === 'spending_limit' || value === 'no_think_stream') {
     return styles.warn;
   }
+  if (value === 'uninspected') return styles.muted;
   return styles.muted;
 };
 
@@ -130,6 +160,11 @@ export function GrokInspectionPage() {
   const [results, setResults] = useState<GrokAccountResult[]>([]);
   const [resultsGen, setResultsGen] = useState(0);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('all');
+  const [search, setSearch] = useState('');
+  const [timeSort, setTimeSort] = useState<TimeSort>('newest');
+  const [syncingUninspected, setSyncingUninspected] = useState(false);
+  const didAutoSyncRef = useRef(false);
+  const syncingUninspectedRef = useRef(false);
   const [workers, setWorkers] = useState(WORKERS_DEFAULT);
   const [includeDisabled, setIncludeDisabled] = useState(false);
   const [onlyDisabled, setOnlyDisabled] = useState(false);
@@ -218,14 +253,78 @@ export function GrokInspectionPage() {
     }
   }, [connectionStatus, showNotification, t]);
 
+  const syncUninspected = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (connectionStatus !== 'connected' || busy || syncingUninspectedRef.current) {
+        return { added: 0, skipped: true as const };
+      }
+      syncingUninspectedRef.current = true;
+      setSyncingUninspected(true);
+      try {
+        const data = await grokInspectionApi.syncUninspected(lang);
+        if (data.status) {
+          mergeStatus(data.status, false);
+          if (data.status.schedule) setScheduleDraft(data.status.schedule);
+        } else {
+          await refresh({ light: false });
+        }
+        const added = Number(data.added || 0);
+        if (!options?.silent) {
+          showNotification(
+            added > 0
+              ? t('grok_inspection.sync_uninspected_added', { count: added })
+              : t('grok_inspection.sync_uninspected_none'),
+            'success'
+          );
+        }
+        return { added, skipped: false as const };
+      } catch (error) {
+        if (!options?.silent) {
+          showNotification(
+            getErrorMessage(error) || t('grok_inspection.sync_uninspected_error'),
+            'error'
+          );
+        }
+        return { added: 0, skipped: false as const };
+      } finally {
+        syncingUninspectedRef.current = false;
+        setSyncingUninspected(false);
+      }
+    },
+    [
+      busy,
+      connectionStatus,
+      lang,
+      mergeStatus,
+      refresh,
+      showNotification,
+      t,
+    ]
+  );
+
   useHeaderRefresh(() => {
     void refresh({ light: false });
     if (tab === 'bans') void loadBans();
   }, connectionStatus === 'connected');
 
   useEffect(() => {
+    if (connectionStatus !== 'connected') {
+      didAutoSyncRef.current = false;
+      return;
+    }
     void refresh({ light: false });
-  }, [refresh]);
+  }, [connectionStatus, refresh]);
+
+  useEffect(() => {
+    if (connectionStatus !== 'connected' || busy || didAutoSyncRef.current) return;
+    // Import missing accounts into "uninspected" without probing.
+    void (async () => {
+      const result = await syncUninspected({ silent: true });
+      if (!result.skipped) {
+        didAutoSyncRef.current = true;
+      }
+    })();
+  }, [busy, connectionStatus, syncUninspected]);
 
   useEffect(() => {
     if (!busy || connectionStatus !== 'connected') return;
@@ -241,7 +340,8 @@ export function GrokInspectionPage() {
   }, [tab, loadBans]);
 
   const filtered = useMemo(() => {
-    if (filter === 'all') return results;
+    const q = search.trim().toLowerCase();
+    let rows = results;
     if (filter === 'other') {
       const primary = new Set([
         'healthy',
@@ -250,16 +350,50 @@ export function GrokInspectionPage() {
         'spending_limit',
         'reauth',
         'no_think_stream',
+        'uninspected',
       ]);
-      return results.filter((row) => !primary.has(row.classification));
+      rows = results.filter((row) => !primary.has(row.classification));
+    } else if (filter !== 'all') {
+      rows = results.filter((row) => row.classification === filter);
     }
-    return results.filter((row) => row.classification === filter);
-  }, [filter, results]);
+    if (q) rows = rows.filter((row) => rowMatchesSearch(row, q));
+    const sorted = [...rows].sort((a, b) => {
+      const da = rowTimeMs(a);
+      const db = rowTimeMs(b);
+      if (da === db) {
+        return String(rowKey(a)).localeCompare(String(rowKey(b)));
+      }
+      return timeSort === 'newest' ? db - da : da - db;
+    });
+    return sorted;
+  }, [filter, results, search, timeSort]);
 
   const summaryCount = (key: string) => {
     if (key === 'all') return status?.summary.total ?? results.length;
-    if (key === 'other') return status?.summary.other ?? 0;
-    return status?.summary[key] ?? 0;
+    if (key === 'other') {
+      return (
+        status?.summary.other ??
+        results.filter((row) => {
+          const primary = new Set([
+            'healthy',
+            'permission_denied',
+            'quota_exhausted',
+            'spending_limit',
+            'reauth',
+            'no_think_stream',
+            'uninspected',
+          ]);
+          return !primary.has(row.classification);
+        }).length
+      );
+    }
+    if (key === 'uninspected') {
+      return (
+        status?.summary.uninspected ??
+        results.filter((row) => row.classification === 'uninspected').length
+      );
+    }
+    return status?.summary[key] ?? results.filter((row) => row.classification === key).length;
   };
 
   const startInspection = async (mode: 'full' | 'incremental' | 'sample' | 'filter') => {
@@ -715,6 +849,13 @@ export function GrokInspectionPage() {
               </Button>
               <Button
                 variant="secondary"
+                onClick={() => void syncUninspected()}
+                disabled={busy || syncingUninspected}
+              >
+                {t('grok_inspection.sync_uninspected')}
+              </Button>
+              <Button
+                variant="secondary"
                 onClick={() => void startInspection('sample')}
                 disabled={busy}
               >
@@ -772,6 +913,33 @@ export function GrokInspectionPage() {
             ))}
           </div>
 
+          <div className={styles.toolbar}>
+            <label className={styles.field}>
+              {t('grok_inspection.search')}
+              <input
+                className={styles.searchInput}
+                value={search}
+                placeholder={t('grok_inspection.search_placeholder')}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </label>
+            <label className={styles.field}>
+              {t('grok_inspection.time_sort')}
+              <select
+                className={styles.input}
+                style={{ width: 140 }}
+                value={timeSort}
+                onChange={(event) => setTimeSort(event.target.value as TimeSort)}
+              >
+                <option value="newest">{t('grok_inspection.time_sort_newest')}</option>
+                <option value="oldest">{t('grok_inspection.time_sort_oldest')}</option>
+              </select>
+            </label>
+            <div className={styles.muted}>
+              {t('grok_inspection.filtered_count', { count: filtered.length })}
+            </div>
+          </div>
+
           <Card title={t('grok_inspection.results_title')}>
             {filtered.length === 0 ? (
               <EmptyState
@@ -786,6 +954,7 @@ export function GrokInspectionPage() {
                     <TableHead>{t('grok_inspection.col_class')}</TableHead>
                     <TableHead>{t('grok_inspection.col_action')}</TableHead>
                     <TableHead>{t('grok_inspection.col_status')}</TableHead>
+                    <TableHead>{t('grok_inspection.col_time')}</TableHead>
                     <TableHead>{t('grok_inspection.col_reason')}</TableHead>
                     <TableHead>{t('grok_inspection.col_ops')}</TableHead>
                   </TableRow>
@@ -810,6 +979,9 @@ export function GrokInspectionPage() {
                           {row.disabled
                             ? t('grok_inspection.disabled')
                             : t('grok_inspection.enabled')}
+                        </TableCell>
+                        <TableCell className={`${styles.nowrap} ${styles.muted}`}>
+                          {formatProbedAt(row)}
                         </TableCell>
                         <TableCell className={styles.reason} title={row.reason}>
                           {row.reason || '-'}

@@ -34,6 +34,8 @@ export interface GrokAccountResult {
   model?: string;
   error_code?: string;
   error_message?: string;
+  probed_at?: string;
+  file_mod_unix?: number;
 }
 
 export interface GrokRowActionReport {
@@ -165,6 +167,8 @@ const normalizeResult = (value: unknown): GrokAccountResult | null => {
     model: stringValue(value.model) || undefined,
     error_code: stringValue(value.error_code) || undefined,
     error_message: stringValue(value.error_message) || undefined,
+    probed_at: stringValue(value.probed_at) || undefined,
+    file_mod_unix: numberValue(value.file_mod_unix) || undefined,
   };
 };
 
@@ -270,6 +274,29 @@ export const grokInspectionApi = {
 
   async start(body: GrokStartOptions): Promise<unknown> {
     return apiClient.post(`${BASE}/start`, body);
+  },
+
+  async syncUninspected(lang?: string): Promise<{
+    ok?: boolean;
+    added?: number;
+    total?: number;
+    status?: GrokInspectionStatus;
+    error?: string;
+  }> {
+    const data = await apiClient.post(`${BASE}/sync-uninspected`, { lang: lang || 'zh' });
+    const payload = unwrapPayload(data);
+    if (!isRecord(payload)) return {};
+    return {
+      ok: payload.ok !== false,
+      added: numberValue(payload.added),
+      total: numberValue(payload.total),
+      status: isRecord(payload.status)
+        ? normalizeStatus(payload.status)
+        : typeof payload.added === 'undefined'
+          ? normalizeStatus(payload)
+          : undefined,
+      error: stringValue(payload.error) || undefined,
+    };
   },
 
   async stop(lang?: string): Promise<unknown> {

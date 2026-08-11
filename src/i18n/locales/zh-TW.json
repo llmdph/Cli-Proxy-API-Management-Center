@@ -265,7 +265,19 @@
     "unban_filter_confirm": "確認解禁「{{filter}}」下的 {{count}} 個帳號？",
     "unban_all_confirm": "確認解禁禁用池中的 {{count}} 個帳號？",
     "unban_filter_started": "分類解禁已開始：{{count}} 個",
-    "unban_all_started": "全部解禁已開始"
+    "unban_all_started": "全部解禁已開始",
+    "filter_uninspected": "未巡檢",
+    "search": "搜尋",
+    "search_placeholder": "信箱 / 檔名 / auth_index",
+    "time_sort": "時間排序",
+    "time_sort_newest": "最新優先",
+    "time_sort_oldest": "最早優先",
+    "col_time": "時間",
+    "filtered_count": "目前 {{count}} 條",
+    "sync_uninspected": "同步未巡檢",
+    "sync_uninspected_added": "已匯入 {{count}} 個未巡檢帳號",
+    "sync_uninspected_none": "沒有新的未巡檢帳號",
+    "sync_uninspected_error": "同步未巡檢帳號失敗"
   },
   "llm_request_logs": {
     "title": "LLM 請求日誌",

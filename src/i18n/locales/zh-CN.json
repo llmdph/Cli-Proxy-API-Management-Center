@@ -265,7 +265,19 @@
     "unban_filter_confirm": "确认解禁「{{filter}}」下的 {{count}} 个账号？",
     "unban_all_confirm": "确认解禁禁用池中的 {{count}} 个账号？",
     "unban_filter_started": "分类解禁已开始：{{count}} 个",
-    "unban_all_started": "全部解禁已开始"
+    "unban_all_started": "全部解禁已开始",
+    "filter_uninspected": "未巡检",
+    "search": "搜索",
+    "search_placeholder": "邮箱 / 文件名 / auth_index",
+    "time_sort": "时间排序",
+    "time_sort_newest": "最新优先",
+    "time_sort_oldest": "最早优先",
+    "col_time": "时间",
+    "filtered_count": "当前 {{count}} 条",
+    "sync_uninspected": "同步未巡检",
+    "sync_uninspected_added": "已导入 {{count}} 个未巡检账号",
+    "sync_uninspected_none": "没有新的未巡检账号",
+    "sync_uninspected_error": "同步未巡检账号失败"
   },
   "llm_request_logs": {
     "title": "LLM 请求日志",
