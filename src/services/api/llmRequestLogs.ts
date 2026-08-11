@@ -107,4 +107,15 @@ export const llmRequestLogsApi = {
     const data = await apiClient.get('/llm-request-logs', { params });
     return normalizeResponse(data);
   },
+
+  async clearLogs(): Promise<{ ok: boolean; cleared: number }> {
+    const data = await apiClient.delete('/llm-request-logs');
+    if (!isRecord(data)) {
+      return { ok: false, cleared: 0 };
+    }
+    return {
+      ok: data.ok === true || data.ok === undefined,
+      cleared: numberValue(data.cleared),
+    };
+  },
 };

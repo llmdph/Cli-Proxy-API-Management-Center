@@ -35,6 +35,7 @@
   display: flex;
   align-items: center;
   gap: $spacing-md;
+  flex-wrap: wrap;
 }
 
 .autoRefresh {
@@ -45,6 +46,20 @@
   font-size: 13px;
   cursor: pointer;
   user-select: none;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: $spacing-md;
+  margin-top: $spacing-lg;
+  flex-wrap: wrap;
+}
+
+.pageInfo {
+  color: var(--muted-foreground);
+  font-size: 13px;
 }
 
 .nowrap {

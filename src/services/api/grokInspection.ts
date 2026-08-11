@@ -14,6 +14,7 @@ export type GrokClassification =
   | 'quota_exhausted'
   | 'spending_limit'
   | 'reauth'
+  | 'no_think_stream'
   | 'model_unavailable'
   | 'probe_error'
   | 'unknown'
@@ -107,16 +108,20 @@ export interface GrokStartOptions {
   sample_count?: number;
   sample_percent?: number;
   classifications?: string[];
+  auth_indexes?: string[];
 }
 
 export interface GrokBanEntry {
   auth_id: string;
   provider?: string;
   error_code?: string;
+  category?: string;
   banned_at?: string;
   reset_at?: string;
   reset_source?: string;
+  remaining_seconds?: number;
   cpa_synced?: boolean;
+  cpa_sync_error?: string;
 }
 
 export interface GrokBansResponse {
@@ -124,6 +129,12 @@ export interface GrokBansResponse {
   count?: number;
   enabled?: boolean;
   fallback_hours?: number;
+  unsynced_count?: number;
+  quota_count?: number;
+  spending_limit_count?: number;
+  permission_count?: number;
+  unauthorized_count?: number;
+  manual_disabled_count?: number;
   [key: string]: unknown;
 }
 
@@ -281,6 +292,7 @@ export const grokInspectionApi = {
     name: string;
     disabled?: boolean;
     delete?: boolean;
+    refresh?: boolean;
   }): Promise<{ ok?: boolean; action_seq?: number; error?: string }> {
     const data = await apiClient.post(`${BASE}/action`, body);
     const payload = unwrapPayload(data);
@@ -317,14 +329,23 @@ export const grokInspectionApi = {
         auth_id: stringValue(entry.auth_id),
         provider: stringValue(entry.provider) || undefined,
         error_code: stringValue(entry.error_code) || undefined,
+        category: stringValue(entry.category) || undefined,
         banned_at: stringValue(entry.banned_at) || undefined,
         reset_at: stringValue(entry.reset_at) || undefined,
         reset_source: stringValue(entry.reset_source) || undefined,
+        remaining_seconds: numberValue(entry.remaining_seconds) || undefined,
         cpa_synced: typeof entry.cpa_synced === 'boolean' ? entry.cpa_synced : undefined,
+        cpa_sync_error: stringValue(entry.cpa_sync_error) || undefined,
       })),
       count: numberValue(raw.count, list.length),
       enabled: typeof raw.enabled === 'boolean' ? raw.enabled : undefined,
       fallback_hours: numberValue(raw.fallback_hours) || undefined,
+      unsynced_count: numberValue(raw.unsynced_count),
+      quota_count: numberValue(raw.quota_count),
+      spending_limit_count: numberValue(raw.spending_limit_count),
+      permission_count: numberValue(raw.permission_count),
+      unauthorized_count: numberValue(raw.unauthorized_count),
+      manual_disabled_count: numberValue(raw.manual_disabled_count),
     };
   },
 
@@ -332,8 +353,22 @@ export const grokInspectionApi = {
     return apiClient.post(`${BASE}/unban`, { auth_id: authId });
   },
 
-  async unbanAll(): Promise<unknown> {
-    return apiClient.post(`${BASE}/unban-all`, {});
+  async unbanAll(body?: { auth_ids?: string[]; category?: string; lang?: string }): Promise<unknown> {
+    return apiClient.post(`${BASE}/unban-all`, body || {});
+  },
+
+  async banDelete(body: {
+    auth_ids?: string[];
+    category?: string;
+    all?: boolean;
+    lang?: string;
+  }): Promise<unknown> {
+    const payload: Record<string, unknown> = {};
+    if (body.lang) payload.lang = body.lang;
+    if (body.auth_ids?.length) payload.auth_ids = body.auth_ids;
+    if (body.category) payload.category = body.category;
+    if (body.all) payload.category = 'all';
+    return apiClient.post(`${BASE}/ban-delete`, payload);
   },
 
   async updateAutobanSettings(body: {

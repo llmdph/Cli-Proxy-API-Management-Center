@@ -36,6 +36,7 @@ const FILTERS = [
   'quota_exhausted',
   'spending_limit',
   'reauth',
+  'no_think_stream',
   'other',
 ] as const;
 
@@ -50,8 +51,73 @@ const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve
 const classificationTone = (value: string) => {
   if (value === 'healthy') return styles.ok;
   if (value === 'reauth' || value === 'permission_denied') return styles.bad;
-  if (value === 'quota_exhausted' || value === 'spending_limit') return styles.warn;
+  if (value === 'quota_exhausted' || value === 'spending_limit' || value === 'no_think_stream') {
+    return styles.warn;
+  }
   return styles.muted;
+};
+
+const BAN_FILTERS = [
+  'all',
+  'unsynced',
+  'quota',
+  'spending_limit',
+  'permission',
+  'unauthorized',
+  'manual',
+] as const;
+
+type BanFilter = (typeof BAN_FILTERS)[number];
+
+const banCategoryOf = (ban: GrokBanEntry): Exclude<BanFilter, 'all' | 'unsynced'> | 'other' => {
+  const direct = String(ban.category || '').trim().toLowerCase();
+  if (
+    direct === 'quota' ||
+    direct === 'spending_limit' ||
+    direct === 'permission' ||
+    direct === 'unauthorized' ||
+    direct === 'manual'
+  ) {
+    return direct;
+  }
+  const code = String(ban.error_code || '').trim().toLowerCase();
+  if (!code) return 'other';
+  if (code.includes('free-usage-exhausted') || code.includes('quota')) return 'quota';
+  if (code.includes('spending-limit') || code.includes('402')) return 'spending_limit';
+  if (code.includes('permission-denied') || code.includes('permission')) return 'permission';
+  if (
+    code.includes('unauthorized') ||
+    code.includes('authentication_error') ||
+    code.includes('invalid_token') ||
+    code.includes('token_expired') ||
+    code === '401' ||
+    code === 'unauthenticated'
+  ) {
+    return 'unauthorized';
+  }
+  if (code.includes('manual-disabled') || code.includes('manual')) return 'manual';
+  return 'other';
+};
+
+const formatRemain = (sec?: number) => {
+  const value = Number(sec || 0);
+  if (!Number.isFinite(value) || value <= 0) return '—';
+  const h = Math.floor(value / 3600);
+  const m = Math.floor((value % 3600) / 60);
+  if (h >= 24 * 30) return 'manual';
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
+  return `${m}m`;
+};
+
+const formatBanReasonKey = (ban: GrokBanEntry) => {
+  const cat = banCategoryOf(ban);
+  if (cat === 'quota') return 'ban_reason_quota';
+  if (cat === 'spending_limit') return 'ban_reason_spending_limit';
+  if (cat === 'permission') return 'ban_reason_permission';
+  if (cat === 'unauthorized') return 'ban_reason_unauthorized';
+  if (cat === 'manual') return 'ban_reason_manual';
+  const code = String(ban.error_code || '').trim();
+  return code || '-';
 };
 
 export function GrokInspectionPage() {
@@ -73,6 +139,15 @@ export function GrokInspectionPage() {
   const [pendingKeys, setPendingKeys] = useState<Set<string>>(new Set());
   const [scheduleDraft, setScheduleDraft] = useState<GrokInspectionSchedule | null>(null);
   const [bans, setBans] = useState<GrokBanEntry[]>([]);
+  const [banMeta, setBanMeta] = useState<{
+    unsynced_count?: number;
+    quota_count?: number;
+    spending_limit_count?: number;
+    permission_count?: number;
+    unauthorized_count?: number;
+    manual_disabled_count?: number;
+  }>({});
+  const [banFilter, setBanFilter] = useState<BanFilter>('all');
   const [autobanEnabled, setAutobanEnabled] = useState(true);
   const [tab, setTab] = useState<'inspect' | 'schedule' | 'bans'>('inspect');
 
@@ -126,6 +201,17 @@ export function GrokInspectionPage() {
     try {
       const data = await grokInspectionApi.bans();
       setBans(data.bans);
+      setBanMeta({
+        unsynced_count:
+          typeof data.unsynced_count === 'number'
+            ? data.unsynced_count
+            : data.bans.filter((item) => item.cpa_synced === false).length,
+        quota_count: data.quota_count,
+        spending_limit_count: data.spending_limit_count,
+        permission_count: data.permission_count,
+        unauthorized_count: data.unauthorized_count,
+        manual_disabled_count: data.manual_disabled_count,
+      });
       if (typeof data.enabled === 'boolean') setAutobanEnabled(data.enabled);
     } catch (error) {
       showNotification(getErrorMessage(error) || t('grok_inspection.bans_error'), 'error');
@@ -145,9 +231,10 @@ export function GrokInspectionPage() {
     if (!busy || connectionStatus !== 'connected') return;
     const timer = window.setInterval(() => {
       void refresh({ light: true });
+      if (tab === 'bans') void loadBans();
     }, 1200);
     return () => window.clearInterval(timer);
-  }, [busy, connectionStatus, refresh]);
+  }, [busy, connectionStatus, refresh, tab, loadBans]);
 
   useEffect(() => {
     if (tab === 'bans') void loadBans();
@@ -162,6 +249,7 @@ export function GrokInspectionPage() {
         'quota_exhausted',
         'spending_limit',
         'reauth',
+        'no_think_stream',
       ]);
       return results.filter((row) => !primary.has(row.classification));
     }
@@ -236,7 +324,7 @@ export function GrokInspectionPage() {
     }
   };
 
-  const batchForce = async (forceAction: 'disable' | 'enable' | 'delete') => {
+  const batchForce = async (forceAction: 'disable' | 'enable' | 'delete' | 'refresh') => {
     const rows = filtered.filter((row) => {
       if (forceAction === 'disable') return !row.disabled;
       if (forceAction === 'enable') return row.disabled;
@@ -276,7 +364,7 @@ export function GrokInspectionPage() {
     throw new Error(t('grok_inspection.action_timeout'));
   };
 
-  const runRowAction = async (row: GrokAccountResult, act: 'disable' | 'enable' | 'delete') => {
+  const runRowAction = async (row: GrokAccountResult, act: 'disable' | 'enable' | 'delete' | 'refresh') => {
     const key = rowKey(row);
     if (!key || pendingKeys.has(key)) return;
     if (act === 'delete') {
@@ -291,6 +379,7 @@ export function GrokInspectionPage() {
         name: actionTargetName(row),
         disabled: act === 'disable',
         delete: act === 'delete',
+        refresh: act === 'refresh',
       });
       if (!result.action_seq) throw new Error(result.error || t('grok_inspection.no_action_seq'));
       const confirmed = await waitRowAction(result.action_seq);
@@ -338,6 +427,165 @@ export function GrokInspectionPage() {
       showNotification(t('grok_inspection.schedule_saved'), 'success');
     } catch (error) {
       showNotification(getErrorMessage(error) || t('grok_inspection.schedule_error'), 'error');
+    }
+  };
+
+  const filteredBans = useMemo(() => {
+    if (banFilter === 'all') return bans;
+    if (banFilter === 'unsynced') return bans.filter((item) => item.cpa_synced === false);
+    return bans.filter((item) => banCategoryOf(item) === banFilter);
+  }, [banFilter, bans]);
+
+  const banSummaryCount = (key: BanFilter) => {
+    if (key === 'all') return bans.length;
+    if (key === 'unsynced') {
+      return (
+        banMeta.unsynced_count ??
+        bans.filter((item) => item.cpa_synced === false).length
+      );
+    }
+    if (key === 'quota') {
+      return banMeta.quota_count ?? bans.filter((item) => banCategoryOf(item) === 'quota').length;
+    }
+    if (key === 'spending_limit') {
+      return (
+        banMeta.spending_limit_count ??
+        bans.filter((item) => banCategoryOf(item) === 'spending_limit').length
+      );
+    }
+    if (key === 'permission') {
+      return (
+        banMeta.permission_count ??
+        bans.filter((item) => banCategoryOf(item) === 'permission').length
+      );
+    }
+    if (key === 'unauthorized') {
+      return (
+        banMeta.unauthorized_count ??
+        bans.filter((item) => banCategoryOf(item) === 'unauthorized').length
+      );
+    }
+    if (key === 'manual') {
+      return (
+        banMeta.manual_disabled_count ??
+        bans.filter((item) => banCategoryOf(item) === 'manual').length
+      );
+    }
+    return 0;
+  };
+
+  const banJobRunning = Boolean(status?.unban && (status.unban as { running?: boolean }).running);
+
+  const runBanDelete = async (mode: 'filter' | 'all') => {
+    const targets =
+      mode === 'all'
+        ? bans.map((item) => item.auth_id).filter(Boolean)
+        : filteredBans.map((item) => item.auth_id).filter(Boolean);
+    if (!targets.length) {
+      showNotification(t('grok_inspection.no_targets'), 'error');
+      return;
+    }
+    const ok = window.confirm(
+      t('grok_inspection.ban_delete_confirm', { count: targets.length })
+    );
+    if (!ok) return;
+    try {
+      await grokInspectionApi.banDelete({
+        lang,
+        all: mode === 'all',
+        category: mode === 'all' ? 'all' : banFilter === 'all' || banFilter === 'unsynced' ? undefined : banFilter,
+        auth_ids: mode === 'all' ? undefined : targets,
+      });
+      showNotification(t('grok_inspection.ban_delete_started'), 'success');
+      await refresh({ light: true });
+      await loadBans();
+    } catch (error) {
+      showNotification(getErrorMessage(error) || t('grok_inspection.ban_delete_error'), 'error');
+    }
+  };
+
+  const runBanUnban = async (mode: 'filter' | 'all') => {
+    const targets =
+      mode === 'all'
+        ? bans.map((item) => item.auth_id).filter(Boolean)
+        : filteredBans.map((item) => item.auth_id).filter(Boolean);
+    if (!targets.length) {
+      showNotification(t('grok_inspection.no_targets'), 'error');
+      return;
+    }
+    const ok = window.confirm(
+      mode === 'all'
+        ? t('grok_inspection.unban_all_confirm', { count: targets.length })
+        : t('grok_inspection.unban_filter_confirm', {
+            count: targets.length,
+            filter: t(`grok_inspection.ban_filter_${banFilter}`),
+          })
+    );
+    if (!ok) return;
+    try {
+      if (mode === 'all') {
+        await grokInspectionApi.unbanAll({});
+      } else {
+        await grokInspectionApi.unbanAll({
+          lang,
+          auth_ids: targets,
+          category: banFilter === 'all' || banFilter === 'unsynced' ? undefined : banFilter,
+        });
+      }
+      showNotification(
+        mode === 'all'
+          ? t('grok_inspection.unban_all_started')
+          : t('grok_inspection.unban_filter_started', { count: targets.length }),
+        'success'
+      );
+      await refresh({ light: true });
+      await loadBans();
+    } catch (error) {
+      showNotification(getErrorMessage(error) || t('grok_inspection.unban_error'), 'error');
+    }
+  };
+
+  const stopBanJob = async () => {
+    try {
+      await grokInspectionApi.stop(lang);
+      showNotification(t('grok_inspection.stopped'), 'success');
+      await refresh({ light: true });
+      await loadBans();
+    } catch (error) {
+      showNotification(getErrorMessage(error) || t('grok_inspection.stop_error'), 'error');
+    }
+  };
+
+  const inspectOne = async (row: GrokAccountResult) => {
+    const key = rowKey(row);
+    if (!key || pendingKeys.has(key) || busy) return;
+    // Prefer stable auth_index; fall back to file name / row key once only.
+    const target =
+      String(row.auth_index || '').trim() ||
+      String(row.file_name || '').trim() ||
+      String(key || '').trim();
+    if (!target) return;
+    setPendingKeys((prev) => new Set(prev).add(key));
+    try {
+      await grokInspectionApi.start({
+        lang,
+        workers: 1,
+        include_disabled: true,
+        only_disabled: false,
+        incremental: false,
+        sample: false,
+        auth_indexes: [target],
+      });
+      showNotification(t('grok_inspection.inspect_one_started'), 'success');
+      await refresh({ light: true });
+    } catch (error) {
+      showNotification(getErrorMessage(error) || t('grok_inspection.start_error'), 'error');
+    } finally {
+      setPendingKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
     }
   };
 
@@ -495,6 +743,9 @@ export function GrokInspectionPage() {
               <Button variant="secondary" onClick={() => void batchForce('enable')} disabled={busy}>
                 {t('grok_inspection.batch_enable')}
               </Button>
+              <Button variant="secondary" onClick={() => void batchForce('refresh')} disabled={busy}>
+                {t('grok_inspection.batch_refresh')}
+              </Button>
               <Button variant="secondary" onClick={() => void batchForce('delete')} disabled={busy}>
                 {t('grok_inspection.batch_delete')}
               </Button>
@@ -585,6 +836,22 @@ export function GrokInspectionPage() {
                               size="sm"
                               variant="secondary"
                               disabled={pending || busy}
+                              onClick={() => void inspectOne(row)}
+                            >
+                              {t('grok_inspection.action_inspect')}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={pending || busy}
+                              onClick={() => void runRowAction(row, 'refresh')}
+                            >
+                              {t('grok_inspection.action_refresh')}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={pending || busy}
                               onClick={() => void runRowAction(row, 'delete')}
                             >
                               {t('grok_inspection.action_delete')}
@@ -657,6 +924,77 @@ export function GrokInspectionPage() {
               </select>
             </label>
           </div>
+          <div className={styles.grid2}>
+            <label className={styles.field}>
+              <ToggleSwitch
+                checked={Boolean(scheduleDraft.include_disabled)}
+                onChange={(checked) =>
+                  setScheduleDraft({
+                    ...scheduleDraft,
+                    include_disabled: checked,
+                    only_disabled: checked ? false : scheduleDraft.only_disabled,
+                  })
+                }
+              />
+              {t('grok_inspection.schedule_include_disabled')}
+            </label>
+            <label className={styles.field}>
+              <ToggleSwitch
+                checked={Boolean(scheduleDraft.only_disabled)}
+                onChange={(checked) =>
+                  setScheduleDraft({
+                    ...scheduleDraft,
+                    only_disabled: checked,
+                    include_disabled: checked ? false : scheduleDraft.include_disabled,
+                  })
+                }
+              />
+              {t('grok_inspection.schedule_only_disabled')}
+            </label>
+            <label className={styles.field}>
+              {t('grok_inspection.schedule_403_action')}
+              <select
+                className={styles.input}
+                style={{ width: 120 }}
+                value={scheduleDraft.permission_denied_action || 'disable'}
+                onChange={(event) =>
+                  setScheduleDraft({
+                    ...scheduleDraft,
+                    permission_denied_action: event.target.value,
+                  })
+                }
+              >
+                <option value="disable">{t('grok_inspection.schedule_action_disable')}</option>
+                <option value="delete">{t('grok_inspection.schedule_action_delete')}</option>
+              </select>
+            </label>
+            <label className={styles.field}>
+              {t('grok_inspection.schedule_402_action')}
+              <select
+                className={styles.input}
+                style={{ width: 120 }}
+                value={scheduleDraft.spending_limit_action || 'disable'}
+                onChange={(event) =>
+                  setScheduleDraft({
+                    ...scheduleDraft,
+                    spending_limit_action: event.target.value,
+                  })
+                }
+              >
+                <option value="disable">{t('grok_inspection.schedule_action_disable')}</option>
+                <option value="delete">{t('grok_inspection.schedule_action_delete')}</option>
+              </select>
+            </label>
+            <label className={styles.field}>
+              <ToggleSwitch
+                checked={Boolean(scheduleDraft.auto_recover_healthy)}
+                onChange={(checked) =>
+                  setScheduleDraft({ ...scheduleDraft, auto_recover_healthy: checked })
+                }
+              />
+              {t('grok_inspection.schedule_auto_recover')}
+            </label>
+          </div>
           <div className={styles.muted} style={{ marginBottom: 12 }}>
             {scheduleDraft.next_run_at
               ? t('grok_inspection.next_run', { time: scheduleDraft.next_run_at })
@@ -693,61 +1031,166 @@ export function GrokInspectionPage() {
             </Button>
             <Button
               variant="secondary"
-              onClick={() =>
-                void grokInspectionApi
-                  .unbanAll()
-                  .then(() => loadBans())
-                  .catch((error) =>
-                    showNotification(
-                      getErrorMessage(error) || t('grok_inspection.unban_error'),
-                      'error'
-                    )
-                  )
-              }
-              disabled={!bans.length}
+              onClick={() => void runBanUnban('filter')}
+              disabled={!filteredBans.length || banJobRunning}
+            >
+              {t('grok_inspection.ban_unban_filter')}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => void runBanUnban('all')}
+              disabled={!bans.length || banJobRunning}
             >
               {t('grok_inspection.unban_all')}
             </Button>
+            <Button
+              variant="secondary"
+              onClick={() => void runBanDelete('filter')}
+              disabled={!filteredBans.length || banJobRunning}
+            >
+              {t('grok_inspection.ban_delete_filter')}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => void runBanDelete('all')}
+              disabled={!bans.length || banJobRunning}
+            >
+              {t('grok_inspection.ban_delete_all')}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => void stopBanJob()}
+              disabled={!banJobRunning}
+            >
+              {t('grok_inspection.ban_stop')}
+            </Button>
           </div>
-          {bans.length === 0 ? (
+          <div className={styles.muted} style={{ marginBottom: 8 }}>
+            {banFilter === 'all'
+              ? t('grok_inspection.ban_filter_hint_all')
+              : t('grok_inspection.ban_filter_current', {
+                  filter: t(`grok_inspection.ban_filter_${banFilter}`),
+                  count: filteredBans.length,
+                })}
+            {banJobRunning ? ` · ${t('grok_inspection.ban_job_running')}` : ''}
+          </div>
+
+          {(banMeta.unsynced_count ?? bans.filter((item) => item.cpa_synced === false).length) >
+            0 && (
+            <div className={styles.warnBanner}>
+              {t('grok_inspection.ban_unsynced_banner', {
+                count:
+                  banMeta.unsynced_count ??
+                  bans.filter((item) => item.cpa_synced === false).length,
+              })}
+            </div>
+          )}
+
+          <div className={styles.summaryRow}>
+            {BAN_FILTERS.map((key) => (
+              <button
+                key={key}
+                type="button"
+                className={`${styles.chip} ${banFilter === key ? styles.chipActive : ''}`}
+                onClick={() => setBanFilter(key)}
+              >
+                {t(`grok_inspection.ban_filter_${key}`)} ({banSummaryCount(key)})
+              </button>
+            ))}
+          </div>
+
+          {filteredBans.length === 0 ? (
             <EmptyState title={t('grok_inspection.bans_empty')} />
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>auth_id</TableHead>
-                  <TableHead>error</TableHead>
-                  <TableHead>reset</TableHead>
+                  <TableHead>{t('grok_inspection.ban_col_auth')}</TableHead>
+                  <TableHead>{t('grok_inspection.ban_col_reason')}</TableHead>
+                  <TableHead>{t('grok_inspection.ban_col_banned_at')}</TableHead>
+                  <TableHead>{t('grok_inspection.ban_col_reset')}</TableHead>
+                  <TableHead>{t('grok_inspection.ban_col_remain')}</TableHead>
+                  <TableHead>{t('grok_inspection.ban_sync')}</TableHead>
                   <TableHead>{t('grok_inspection.col_ops')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {bans.map((ban) => (
-                  <TableRow key={ban.auth_id}>
-                    <TableCell className={styles.mono}>{ban.auth_id}</TableCell>
-                    <TableCell>{ban.error_code || '-'}</TableCell>
-                    <TableCell className={styles.muted}>{ban.reset_at || '-'}</TableCell>
-                    <TableCell>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() =>
-                          void grokInspectionApi
-                            .unban(ban.auth_id)
-                            .then(() => loadBans())
-                            .catch((error) =>
-                              showNotification(
-                                getErrorMessage(error) || t('grok_inspection.unban_error'),
-                                'error'
-                              )
-                            )
-                        }
-                      >
-                        {t('grok_inspection.unban')}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {filteredBans.map((ban) => {
+                  const synced = ban.cpa_synced === true;
+                  const syncLabel = synced
+                    ? t('grok_inspection.ban_synced')
+                    : t('grok_inspection.ban_unsynced');
+                  const syncText = ban.cpa_sync_error
+                    ? `${syncLabel} · ${ban.cpa_sync_error}`
+                    : syncLabel;
+                  return (
+                    <TableRow key={ban.auth_id}>
+                      <TableCell className={styles.mono}>{ban.auth_id}</TableCell>
+                      <TableCell>
+                        {(() => {
+                          const reasonKey = formatBanReasonKey(ban);
+                          return reasonKey.startsWith('ban_reason_')
+                            ? t(`grok_inspection.${reasonKey}`)
+                            : reasonKey;
+                        })()}
+                      </TableCell>
+                      <TableCell className={styles.muted}>{ban.banned_at || '-'}</TableCell>
+                      <TableCell className={styles.muted}>
+                        {ban.reset_source || ban.reset_at || '-'}
+                      </TableCell>
+                      <TableCell className={styles.nowrap}>
+                        {formatRemain(ban.remaining_seconds)}
+                      </TableCell>
+                      <TableCell className={synced ? styles.ok : styles.warn} title={syncText}>
+                        {syncText}
+                      </TableCell>
+                      <TableCell>
+                        <div className={styles.rowActions}>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() =>
+                              void grokInspectionApi
+                                .unban(ban.auth_id)
+                                .then(() => loadBans())
+                                .catch((error) =>
+                                  showNotification(
+                                    getErrorMessage(error) || t('grok_inspection.unban_error'),
+                                    'error'
+                                  )
+                                )
+                            }
+                          >
+                            {t('grok_inspection.unban')}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() =>
+                              void grokInspectionApi
+                                .banDelete({ lang, auth_ids: [ban.auth_id] })
+                                .then(() => {
+                                  showNotification(
+                                    t('grok_inspection.ban_delete_started'),
+                                    'success'
+                                  );
+                                  return loadBans();
+                                })
+                                .catch((error) =>
+                                  showNotification(
+                                    getErrorMessage(error) || t('grok_inspection.ban_delete_error'),
+                                    'error'
+                                  )
+                                )
+                            }
+                          >
+                            {t('grok_inspection.ban_delete')}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}

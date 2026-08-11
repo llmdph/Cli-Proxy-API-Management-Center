@@ -160,3 +160,14 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+
+.warnBanner {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--warning-color, #d97706) 35%, transparent);
+  background: color-mix(in srgb, var(--warning-color, #d97706) 12%, transparent);
+  color: var(--warning-color, #d97706);
+  font-size: 12px;
+}
