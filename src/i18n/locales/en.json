@@ -277,7 +277,11 @@
     "sync_uninspected": "Sync uninspected",
     "sync_uninspected_added": "Imported {{count}} uninspected account(s)",
     "sync_uninspected_none": "No new uninspected accounts",
-    "sync_uninspected_error": "Failed to sync uninspected accounts"
+    "sync_uninspected_error": "Failed to sync uninspected accounts",
+    "page_size": "Page size",
+    "pagination_prev": "Previous",
+    "pagination_next": "Next",
+    "pagination_info": "Page {{current}}/{{total}} · {{from}}-{{to}} / {{count}} total"
   },
   "llm_request_logs": {
     "title": "LLM Request Logs",

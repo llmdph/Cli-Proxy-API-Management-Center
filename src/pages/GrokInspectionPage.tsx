@@ -28,6 +28,8 @@ import styles from './GrokInspectionPage.module.scss';
 const WORKERS_MIN = 1;
 const WORKERS_MAX = 16;
 const WORKERS_DEFAULT = 6;
+const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
+const PAGE_SIZE_DEFAULT = 20;
 
 const FILTERS = [
   'all',
@@ -162,6 +164,10 @@ export function GrokInspectionPage() {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('all');
   const [search, setSearch] = useState('');
   const [timeSort, setTimeSort] = useState<TimeSort>('newest');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE_DEFAULT);
+  const [banPage, setBanPage] = useState(1);
+  const [banPageSize, setBanPageSize] = useState<number>(PAGE_SIZE_DEFAULT);
   const [syncingUninspected, setSyncingUninspected] = useState(false);
   const didAutoSyncRef = useRef(false);
   const syncingUninspectedRef = useRef(false);
@@ -368,6 +374,22 @@ export function GrokInspectionPage() {
     return sorted;
   }, [filter, results, search, timeSort]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize) || 1);
+  const currentPage = Math.min(page, totalPages);
+  const pageOffset = (currentPage - 1) * pageSize;
+  const paged = useMemo(
+    () => filtered.slice(pageOffset, pageOffset + pageSize),
+    [filtered, pageOffset, pageSize]
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [filter, search, timeSort, pageSize]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
   const summaryCount = (key: string) => {
     if (key === 'all') return status?.summary.total ?? results.length;
     if (key === 'other') {
@@ -569,6 +591,22 @@ export function GrokInspectionPage() {
     if (banFilter === 'unsynced') return bans.filter((item) => item.cpa_synced === false);
     return bans.filter((item) => banCategoryOf(item) === banFilter);
   }, [banFilter, bans]);
+
+  const banTotalPages = Math.max(1, Math.ceil(filteredBans.length / banPageSize) || 1);
+  const banCurrentPage = Math.min(banPage, banTotalPages);
+  const banPageOffset = (banCurrentPage - 1) * banPageSize;
+  const pagedBans = useMemo(
+    () => filteredBans.slice(banPageOffset, banPageOffset + banPageSize),
+    [banPageOffset, banPageSize, filteredBans]
+  );
+
+  useEffect(() => {
+    setBanPage(1);
+  }, [banFilter, banPageSize]);
+
+  useEffect(() => {
+    if (banPage > banTotalPages) setBanPage(banTotalPages);
+  }, [banPage, banTotalPages]);
 
   const banSummaryCount = (key: BanFilter) => {
     if (key === 'all') return bans.length;
@@ -935,6 +973,21 @@ export function GrokInspectionPage() {
                 <option value="oldest">{t('grok_inspection.time_sort_oldest')}</option>
               </select>
             </label>
+            <label className={styles.field}>
+              {t('grok_inspection.page_size')}
+              <select
+                className={styles.input}
+                style={{ width: 88 }}
+                value={pageSize}
+                onChange={(event) => setPageSize(Number(event.target.value) || PAGE_SIZE_DEFAULT)}
+              >
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </label>
             <div className={styles.muted}>
               {t('grok_inspection.filtered_count', { count: filtered.length })}
             </div>
@@ -947,6 +1000,7 @@ export function GrokInspectionPage() {
                 description={t('grok_inspection.empty_hint')}
               />
             ) : (
+              <>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -960,7 +1014,7 @@ export function GrokInspectionPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map((row) => {
+                  {paged.map((row) => {
                     const key = rowKey(row);
                     const pending = pendingKeys.has(key);
                     return (
@@ -1035,6 +1089,34 @@ export function GrokInspectionPage() {
                   })}
                 </TableBody>
               </Table>
+              <div className={styles.pagination}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                >
+                  {t('grok_inspection.pagination_prev')}
+                </Button>
+                <div className={styles.pageInfo}>
+                  {t('grok_inspection.pagination_info', {
+                    current: currentPage,
+                    total: totalPages,
+                    count: filtered.length,
+                    from: filtered.length === 0 ? 0 : pageOffset + 1,
+                    to: Math.min(pageOffset + paged.length, filtered.length),
+                  })}
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                >
+                  {t('grok_inspection.pagination_next')}
+                </Button>
+              </div>
+              </>
             )}
           </Card>
         </div>
@@ -1271,9 +1353,31 @@ export function GrokInspectionPage() {
             ))}
           </div>
 
+          <div className={styles.toolbar}>
+            <label className={styles.field}>
+              {t('grok_inspection.page_size')}
+              <select
+                className={styles.input}
+                style={{ width: 88 }}
+                value={banPageSize}
+                onChange={(event) => setBanPageSize(Number(event.target.value) || PAGE_SIZE_DEFAULT)}
+              >
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className={styles.muted}>
+              {t('grok_inspection.filtered_count', { count: filteredBans.length })}
+            </div>
+          </div>
+
           {filteredBans.length === 0 ? (
             <EmptyState title={t('grok_inspection.bans_empty')} />
           ) : (
+            <>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1287,7 +1391,7 @@ export function GrokInspectionPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredBans.map((ban) => {
+                {pagedBans.map((ban) => {
                   const synced = ban.cpa_synced === true;
                   const syncLabel = synced
                     ? t('grok_inspection.ban_synced')
@@ -1365,6 +1469,34 @@ export function GrokInspectionPage() {
                 })}
               </TableBody>
             </Table>
+            <div className={styles.pagination}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setBanPage((p) => Math.max(1, p - 1))}
+                disabled={banCurrentPage <= 1}
+              >
+                {t('grok_inspection.pagination_prev')}
+              </Button>
+              <div className={styles.pageInfo}>
+                {t('grok_inspection.pagination_info', {
+                  current: banCurrentPage,
+                  total: banTotalPages,
+                  count: filteredBans.length,
+                  from: filteredBans.length === 0 ? 0 : banPageOffset + 1,
+                  to: Math.min(banPageOffset + pagedBans.length, filteredBans.length),
+                })}
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setBanPage((p) => Math.min(banTotalPages, p + 1))}
+                disabled={banCurrentPage >= banTotalPages}
+              >
+                {t('grok_inspection.pagination_next')}
+              </Button>
+            </div>
+            </>
           )}
         </Card>
       )}

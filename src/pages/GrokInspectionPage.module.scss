@@ -183,3 +183,18 @@
   padding: 0 10px;
   font-size: 13px;
 }
+
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: $spacing-md;
+  margin-top: $spacing-lg;
+  flex-wrap: wrap;
+}
+
+.pageInfo {
+  color: var(--muted-foreground);
+  font-size: 13px;
+}

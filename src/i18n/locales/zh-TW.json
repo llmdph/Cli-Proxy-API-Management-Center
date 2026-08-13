@@ -277,7 +277,11 @@
     "sync_uninspected": "同步未巡檢",
     "sync_uninspected_added": "已匯入 {{count}} 個未巡檢帳號",
     "sync_uninspected_none": "沒有新的未巡檢帳號",
-    "sync_uninspected_error": "同步未巡檢帳號失敗"
+    "sync_uninspected_error": "同步未巡檢帳號失敗",
+    "page_size": "每頁",
+    "pagination_prev": "上一頁",
+    "pagination_next": "下一頁",
+    "pagination_info": "第 {{current}}/{{total}} 頁 · {{from}}-{{to}} / 共 {{count}} 條"
   },
   "llm_request_logs": {
     "title": "LLM 請求日誌",
