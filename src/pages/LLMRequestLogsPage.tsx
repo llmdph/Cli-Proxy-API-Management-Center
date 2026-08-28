@@ -26,6 +26,28 @@ import styles from './LLMRequestLogsPage.module.scss';
 
 const PAGE_SIZE = 50;
 
+const REQUEST_CLASS_FILTERS = [
+  { value: '', labelKey: 'llm_request_logs.filter_all' },
+  { value: 'normal', labelKey: 'llm_request_logs.class_normal' },
+  { value: 'session_name', labelKey: 'llm_request_logs.class_session_name' },
+  { value: 'compaction', labelKey: 'llm_request_logs.class_compaction' },
+  { value: 'internal', labelKey: 'llm_request_logs.class_internal' },
+] as const;
+
+const requestClassLabelKey = (value: string) => {
+  switch (value) {
+    case 'session_name':
+      return 'llm_request_logs.class_session_name';
+    case 'compaction':
+      return 'llm_request_logs.class_compaction';
+    case 'internal':
+      return 'llm_request_logs.class_internal';
+    default:
+      return 'llm_request_logs.class_normal';
+  }
+};
+
+
 export function LLMRequestLogsPage() {
   const { t, i18n } = useTranslation();
   const { showNotification } = useNotificationStore();
@@ -38,6 +60,9 @@ export function LLMRequestLogsPage() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [detailEntry, setDetailEntry] = useState<LLMRequestLogEntry | null>(null);
+  const [requestClass, setRequestClass] = useState('');
+  const [accountInput, setAccountInput] = useState('');
+  const [accountFilter, setAccountFilter] = useState('');
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
   const currentPage = Math.min(page, totalPages);
@@ -50,6 +75,8 @@ export function LLMRequestLogsPage() {
       const response = await llmRequestLogsApi.fetchLogs({
         limit: PAGE_SIZE,
         offset: (Math.max(1, page) - 1) * PAGE_SIZE,
+        class: requestClass || undefined,
+        account: accountFilter || undefined,
       });
       setItems(response.items);
       setTotal(response.total);
@@ -63,7 +90,7 @@ export function LLMRequestLogsPage() {
     } finally {
       setLoading(false);
     }
-  }, [connectionStatus, page, showNotification, t]);
+  }, [accountFilter, connectionStatus, page, requestClass, showNotification, t]);
 
   const handleClear = useCallback(async () => {
     if (connectionStatus !== 'connected' || clearing) return;
@@ -88,6 +115,19 @@ export function LLMRequestLogsPage() {
   }, [clearing, connectionStatus, loadLogs, showNotification, t]);
 
   useHeaderRefresh(loadLogs, connectionStatus === 'connected');
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const next = accountInput.trim();
+      setAccountFilter((prev) => {
+        if (prev !== next) {
+          setPage(1);
+        }
+        return next;
+      });
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [accountInput]);
 
   useEffect(() => {
     void loadLogs();
@@ -122,6 +162,31 @@ export function LLMRequestLogsPage() {
         title={t('llm_request_logs.table_title')}
         extra={
           <div className={styles.toolbar}>
+            <div className={styles.filters}>
+              <input
+                className={styles.accountFilter}
+                type="search"
+                value={accountInput}
+                onChange={(event) => setAccountInput(event.target.value)}
+                placeholder={t("llm_request_logs.account_filter_placeholder")}
+                aria-label={t("llm_request_logs.account_filter")}
+              />
+              {REQUEST_CLASS_FILTERS.map((item) => (
+                <button
+                  key={item.value || 'all'}
+                  type="button"
+                  className={
+                    requestClass === item.value ? styles.chipActive : styles.chip
+                  }
+                  onClick={() => {
+                    setRequestClass(item.value);
+                    setPage(1);
+                  }}
+                >
+                  {t(item.labelKey)}
+                </button>
+              ))}
+            </div>
             <label className={styles.autoRefresh}>
               <ToggleSwitch checked={autoRefresh} onChange={setAutoRefresh} />
               <span>{t('llm_request_logs.auto_refresh')}</span>
@@ -159,7 +224,9 @@ export function LLMRequestLogsPage() {
                 <TableRow>
                   <TableHead>{t('llm_request_logs.col_time')}</TableHead>
                   <TableHead>{t('llm_request_logs.col_token')}</TableHead>
+                  <TableHead>{t('llm_request_logs.col_account')}</TableHead>
                   <TableHead>{t('llm_request_logs.col_group')}</TableHead>
+                  <TableHead>{t('llm_request_logs.col_request')}</TableHead>
                   <TableHead>{t('llm_request_logs.col_type')}</TableHead>
                   <TableHead>{t('llm_request_logs.col_model')}</TableHead>
                   <TableHead>{t('llm_request_logs.col_latency')}</TableHead>
@@ -186,7 +253,17 @@ export function LLMRequestLogsPage() {
                       </span>
                     </TableCell>
                     <TableCell>
+                      <span className={styles.nowrap} title={entry.account}>
+                        {entry.account || '-'}
+                      </span>
+                    </TableCell>
+                    <TableCell>
                       {entry.group ? <span className={styles.pill}>{entry.group}</span> : '-'}
+                    </TableCell>
+                    <TableCell>
+                      <span className={styles.pill}>
+                        {t(requestClassLabelKey(entry.request_class))}
+                      </span>
                     </TableCell>
                     <TableCell>
                       <span className={entry.failed ? styles.bad : styles.ok}>
@@ -276,7 +353,16 @@ export function LLMRequestLogsPage() {
         width={760}
       >
         <pre className={styles.detail}>
-          {detailEntry ? JSON.stringify(detailEntry, null, 2) : ''}
+          {detailEntry
+            ? JSON.stringify(
+                {
+                  ...detailEntry,
+                  request_class: t(requestClassLabelKey(detailEntry.request_class)),
+                },
+                null,
+                2,
+              )
+            : ''}
         </pre>
       </Modal>
     </div>

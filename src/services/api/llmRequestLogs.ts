@@ -9,8 +9,10 @@ export interface LLMRequestLogEntry {
   id: string;
   time: string;
   token: string;
+  account: string;
   group: string;
   type: string;
+  request_class: string;
   model: string;
   latency_ms: number;
   ttft_ms: number;
@@ -42,6 +44,8 @@ export interface LLMRequestLogsResponse {
 export interface LLMRequestLogsQuery {
   limit?: number;
   offset?: number;
+  class?: string;
+  account?: string;
 }
 
 const numberValue = (value: unknown): number => {
@@ -63,8 +67,10 @@ const normalizeEntry = (value: unknown): LLMRequestLogEntry | null => {
     id: stringValue(value.id),
     time: stringValue(value.time),
     token: stringValue(value.token),
+    account: stringValue(value.account) || stringValue(value.source),
     group: stringValue(value.group),
     type: stringValue(value.type),
+    request_class: stringValue(value.request_class) || 'normal',
     model: stringValue(value.model),
     latency_ms: numberValue(value.latency_ms),
     ttft_ms: numberValue(value.ttft_ms),
