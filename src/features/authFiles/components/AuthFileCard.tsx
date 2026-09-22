@@ -9,6 +9,7 @@ import {
   IconInfo,
   IconModelCluster,
   IconRefreshCw,
+  IconScanSearch,
   IconSettings,
   IconTrash2,
 } from '@/components/ui/icons';
@@ -24,6 +25,8 @@ import {
   getAuthFileStatusMessage,
   getThemeSurfaceIconBackground,
   hasAuthFileStatusWarning,
+  isDownrankAuthFile,
+  isXAIAuthFile,
   getTypeColor,
   getTypeLabel,
   isRuntimeOnlyAuthFile,
@@ -47,6 +50,7 @@ export type AuthFileCardProps = {
   deleting: string | null;
   statusUpdating: Record<string, boolean>;
   manualRefreshing: Record<string, boolean>;
+  thinkProbing: Record<string, boolean>;
   quotaFilterType: QuotaProviderType | null;
   statusBarCache: Map<string, AuthFileStatusBarData>;
   /** 首屏一次性级联入场的延迟；null/undefined 表示不做入场动画。 */
@@ -54,6 +58,7 @@ export type AuthFileCardProps = {
   onShowModels: (file: AuthFileItem) => void;
   onDownload: (name: string) => void;
   onManualRefresh: (file: AuthFileItem) => void;
+  onThinkProbe: (file: AuthFileItem) => void;
   onOpenPrefixProxyEditor: (file: AuthFileItem) => void;
   onDelete: (name: string) => void;
   onToggleStatus: (file: AuthFileItem, enabled: boolean) => void;
@@ -77,12 +82,14 @@ export function AuthFileCard(props: AuthFileCardProps) {
     deleting,
     statusUpdating,
     manualRefreshing,
+    thinkProbing,
     quotaFilterType,
     statusBarCache,
     entranceDelayMs,
     onShowModels,
     onDownload,
     onManualRefresh,
+    onThinkProbe,
     onOpenPrefixProxyEditor,
     onDelete,
     onToggleStatus,
@@ -95,6 +102,8 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const showModelsButton = !isRuntimeOnly || isAistudio;
   const showManualRefreshButton = !isRuntimeOnly && supportsAuthFileManualRefresh(providerKey);
   const isManualRefreshing = manualRefreshing[file.name] === true;
+  const isThinkProbing = thinkProbing[file.name] === true;
+  const showThinkProbeButton = !isRuntimeOnly && isXAIAuthFile(file);
   const typeColor = getTypeColor(providerKey, resolvedTheme);
   const typeLabel = getTypeLabel(t, providerKey);
   const providerIcon = getAuthFileIcon(providerKey, resolvedTheme);
@@ -114,6 +123,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
 
   const rawStatusMessage = getAuthFileStatusMessage(file);
   const hasStatusWarning = hasAuthFileStatusWarning(file);
+  const isDownrank = isDownrankAuthFile(file);
 
   const priorityValue = Number.isSafeInteger(file.priority) ? file.priority : undefined;
   const weightValue = Number.isSafeInteger(file.weight) ? file.weight : undefined;
@@ -201,6 +211,11 @@ export function AuthFileCard(props: AuthFileCardProps) {
             >
               {typeLabel}
             </span>
+            {isDownrank && (
+              <span className={styles.downrankBadge} title={t('auth_files.downrank_badge_hint')}>
+                {t('auth_files.downrank_badge')}
+              </span>
+            )}
             <span className={`${styles.stateBadge} ${stateBadgeClass}`}>
               <span className={styles.stateDot} aria-hidden="true" />
               {stateLabel}
@@ -305,6 +320,23 @@ export function AuthFileCard(props: AuthFileCardProps) {
           )}
           {!isRuntimeOnly && (
             <div className={styles.utilityActions}>
+              {showThinkProbeButton && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => onThinkProbe(file)}
+                  className={styles.iconButton}
+                  title={t('auth_files.think_probe_button')}
+                  disabled={
+                    disableControls ||
+                    statusUpdating[file.name] === true ||
+                    isManualRefreshing ||
+                    isThinkProbing
+                  }
+                >
+                  {isThinkProbing ? <LoadingSpinner size={14} /> : <IconScanSearch size={15} />}
+                </Button>
+              )}
               {showManualRefreshButton && (
                 <Button
                   variant="secondary"
@@ -316,7 +348,8 @@ export function AuthFileCard(props: AuthFileCardProps) {
                     disableControls ||
                     file.disabled ||
                     statusUpdating[file.name] === true ||
-                    isManualRefreshing
+                    isManualRefreshing ||
+                    isThinkProbing
                   }
                 >
                   {isManualRefreshing ? <LoadingSpinner size={14} /> : <IconRefreshCw size={15} />}

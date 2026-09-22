@@ -44,6 +44,8 @@ export interface AuthFileItem {
   priority?: number;
   weight?: number;
   note?: string;
+  /** xAI degraded-pool mark from backend metadata xai_downrank_pool. */
+  xaiDownrankPool?: boolean;
   success?: unknown;
   failed?: unknown;
   /** 归一化后的累计成功/失败计数（由 API 边界从 success/failed 生字段填充）。 */

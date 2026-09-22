@@ -1,6 +1,6 @@
 import { useMemo, type CSSProperties } from 'react';
 import type { AuthFileItem } from '@/types';
-import { hasAuthFileStatusWarning } from '@/features/authFiles/constants';
+import { hasAuthFileStatusWarning, isDownrankAuthFile } from '@/features/authFiles/constants';
 import type { AuthFileStatusBarData } from '@/features/authFiles/hooks/useAuthFilesStatusBarCache';
 import styles from './VaultPulse.module.scss';
 
@@ -46,7 +46,7 @@ export function VaultPulse({ files, statusBarCache }: VaultPulseProps) {
         let state: PulseState;
         if (file.unavailable === true) {
           state = 'problem';
-        } else if (hasAuthFileStatusWarning(file)) {
+        } else if (hasAuthFileStatusWarning(file) || isDownrankAuthFile(file)) {
           state = 'warning';
         } else {
           const authIndexKey = typeof file.authIndex === 'string' ? file.authIndex : null;

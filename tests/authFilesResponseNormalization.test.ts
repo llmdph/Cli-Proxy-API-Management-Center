@@ -95,6 +95,18 @@ describe('auth-files response normalization', () => {
     expect(result.files[0]?.email).toBe('fresh@example.com');
   });
 
+  test('normalizes xai_downrank_pool onto xaiDownrankPool', () => {
+    const result = normalizeAuthFilesResponse(
+      responseWithRawFiles([
+        { name: 'xai-a.json', xai_downrank_pool: true },
+        { name: 'xai-b.json', xai_downrank_pool: 'true' },
+        { name: 'xai-c.json' },
+      ])
+    );
+
+    expect(result.files.map((file) => file.xaiDownrankPool)).toEqual([true, true, undefined]);
+  });
+
   test('passes account through raw without deriving a camelCase field', () => {
     const result = normalizeAuthFilesResponse(
       responseWithRawFiles([

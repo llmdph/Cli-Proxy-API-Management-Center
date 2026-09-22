@@ -121,6 +121,19 @@
   white-space: nowrap;
 }
 
+.downrankBadge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+  padding: 2px 7px;
+  border-radius: 6px;
+  white-space: nowrap;
+  color: var(--amber-text);
+  border: 1px solid var(--amber-30);
+  background: var(--amber-10);
+}
+
 .stateBadge {
   margin-left: auto;
   display: inline-flex;

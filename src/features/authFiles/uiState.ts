@@ -4,6 +4,7 @@ export const AUTH_FILES_STATUS_FILTER_MODES = [
   'enabled',
   'disabled',
   'problem',
+  'downrank',
 ] as const;
 
 export type AuthFilesSortMode = (typeof AUTH_FILES_SORT_MODES)[number];

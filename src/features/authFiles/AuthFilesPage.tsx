@@ -13,8 +13,10 @@ import {
   QUOTA_PROVIDER_TYPES,
   clampCardPageSize,
   getTypeLabel,
+  isDownrankAuthFile,
   isProblemAuthFile,
   isRuntimeOnlyAuthFile,
+  isXAIAuthFile,
   normalizeProviderKey,
   type QuotaProviderType,
   type ResolvedTheme,
@@ -125,6 +127,8 @@ export function AuthFilesPage() {
     deletingAll,
     statusUpdating,
     manualRefreshing,
+    thinkProbing,
+    thinkProbeRunning,
     batchStatusUpdating,
     fileInputRef,
     loadFiles,
@@ -134,6 +138,7 @@ export function AuthFilesPage() {
     handleDeleteAll,
     handleDownload,
     handleManualRefresh,
+    handleThinkProbe,
     handleStatusToggle,
     toggleSelect,
     selectAllVisible,
@@ -187,6 +192,7 @@ export function AuthFilesPage() {
   const problemOnly = statusFilterMode === 'problem';
   const disabledOnly = statusFilterMode === 'disabled';
   const enabledOnly = statusFilterMode === 'enabled';
+  const downrankOnly = statusFilterMode === 'downrank';
 
   /* ---------- uiState 水合与持久化（localStorage key/形状与旧版完全一致） ---------- */
 
@@ -390,9 +396,10 @@ export function AuthFilesPage() {
         if (enabledOnly && file.disabled === true) return false;
         if (disabledOnly && file.disabled !== true) return false;
         if (problemOnly && !isProblemAuthFile(file)) return false;
+        if (downrankOnly && !isDownrankAuthFile(file)) return false;
         return true;
       }),
-    [disabledOnly, enabledOnly, files, problemOnly]
+    [disabledOnly, downrankOnly, enabledOnly, files, problemOnly]
   );
 
   const statusFilterOptions = useMemo(
@@ -402,6 +409,7 @@ export function AuthFilesPage() {
         { value: 'enabled', label: t('auth_files.problem_filter_enabled') },
         { value: 'disabled', label: t('auth_files.problem_filter_disabled') },
         { value: 'problem', label: t('auth_files.problem_filter_problem') },
+        { value: 'downrank', label: t('auth_files.problem_filter_downrank') },
       ] satisfies Array<{ value: AuthFilesStatusFilterMode; label: string }>,
     [t]
   );
@@ -467,6 +475,7 @@ export function AuthFilesPage() {
 
   const activeCount = useMemo(() => files.filter((file) => file.disabled !== true).length, [files]);
   const problemCount = useMemo(() => files.filter(isProblemAuthFile).length, [files]);
+  const downrankCount = useMemo(() => files.filter(isDownrankAuthFile).length, [files]);
 
   /* ---------- 首屏卡片一次性级联入场 ----------
    * 首批数据渲染后立即翻转 cardsAnimated；已挂载的卡片在挂载时捕获过
@@ -573,6 +582,7 @@ export function AuthFilesPage() {
         totalCount={files.length}
         activeCount={activeCount}
         problemCount={problemCount}
+        downrankCount={downrankCount}
         loading={loading}
         refreshing={refreshing}
         uploading={uploading}
@@ -691,12 +701,14 @@ export function AuthFilesPage() {
                 deleting={deleting}
                 statusUpdating={statusUpdating}
                 manualRefreshing={manualRefreshing}
+                thinkProbing={thinkProbing}
                 quotaFilterType={quotaFilterType}
                 statusBarCache={statusBarCache}
                 entranceDelayMs={cardEntranceDelay(index)}
                 onShowModels={showModels}
                 onDownload={handleDownload}
                 onManualRefresh={handleManualRefresh}
+                onThinkProbe={(file) => void handleThinkProbe([file.name])}
                 onOpenPrefixProxyEditor={openPrefixProxyEditor}
                 onDelete={handleDelete}
                 onToggleStatus={handleStatusToggle}
@@ -801,6 +813,16 @@ export function AuthFilesPage() {
         onDownload={() => void batchDownload(selectedNames)}
         onEnable={() => batchSetStatus(selectedNames, true)}
         onDisable={() => batchSetStatus(selectedNames, false)}
+        onThinkProbe={() => void handleThinkProbe(selectedNames)}
+        thinkProbeDisabled={
+          disableControls ||
+          thinkProbeRunning ||
+          selectedNames.every((name) => {
+            const file = files.find((item) => item.name === name);
+            return !file || !isXAIAuthFile(file) || isRuntimeOnlyAuthFile(file);
+          })
+        }
+        thinkProbeLoading={thinkProbeRunning}
         onDelete={() => batchDelete(selectedNames)}
       />
     </div>

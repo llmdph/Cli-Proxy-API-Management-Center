@@ -235,6 +235,16 @@ const readRuntimeOnlyField = (entry: AuthFileEntry): boolean => {
   return false;
 };
 
+const DOWNRANK_TRUTHY = new Set(['1', 'true', 'yes']);
+
+const readDownrankField = (entry: AuthFileEntry): boolean => {
+  const raw = entry['xai_downrank_pool'] ?? entry.xaiDownrankPool;
+  if (raw === true) return true;
+  if (typeof raw === 'number') return raw !== 0;
+  if (typeof raw === 'string') return DOWNRANK_TRUTHY.has(raw.trim().toLowerCase());
+  return false;
+};
+
 /**
  * 契约边界归一化：把后端 kebab/snake_case 生字段填充到 AuthFileItem 声明的
  * camelCase 字段上。原始字段全部透传——quota resolvers 仍直接读
@@ -267,6 +277,7 @@ const normalizeAuthFileEntry = (entry: AuthFileEntry): AuthFileEntry => {
     ...(note ? { note } : {}),
     ...(email ? { email } : {}),
     ...(projectId ? { projectId } : {}),
+    ...(readDownrankField(entry) ? { xaiDownrankPool: true } : {}),
   };
 };
 
@@ -409,6 +420,30 @@ const MANUAL_REFRESH_EXPIRY_OFFSET_MS = 60_000;
 export const buildManualRefreshExpiredAt = (nowMs = Date.now()): string =>
   new Date(nowMs - MANUAL_REFRESH_EXPIRY_OFFSET_MS).toISOString();
 
+
+export type AuthFileThinkProbeResult = {
+  name: string;
+  email?: string;
+  action: string;
+  reason?: string;
+  has_think?: boolean;
+  http_status?: number;
+  downrank?: boolean;
+};
+
+export type AuthFileThinkProbeStatus = {
+  running: boolean;
+  done: number;
+  total: number;
+  marked: number;
+  restored: number;
+  failed: number;
+  skipped: number;
+  current?: string;
+  results?: AuthFileThinkProbeResult[];
+  error?: string;
+};
+
 export const authFilesApi = {
   list: async () =>
     normalizeAuthFilesResponse(await apiClient.get<AuthFilesResponse>('/auth-files')),
@@ -550,4 +585,12 @@ export const authFilesApi = {
       ? (models as { id: string; display_name?: string; type?: string; owned_by?: string }[])
       : [];
   },
+
+  startThinkProbe: (names: string[], workers?: number) =>
+    apiClient.post<AuthFileThinkProbeStatus>('/auth-files/think-probe', {
+      names,
+      ...(typeof workers === 'number' ? { workers } : {}),
+    }),
+
+  getThinkProbe: () => apiClient.get<AuthFileThinkProbeStatus>('/auth-files/think-probe'),
 };

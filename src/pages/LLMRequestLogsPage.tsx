@@ -47,6 +47,17 @@ const requestClassLabelKey = (value: string) => {
   }
 };
 
+const channelLabelKey = (value: string) => {
+  switch (value) {
+    case 'console':
+      return 'llm_request_logs.channel_console';
+    case 'build':
+      return 'llm_request_logs.channel_build';
+    default:
+      return '';
+  }
+};
+
 
 export function LLMRequestLogsPage() {
   const { t, i18n } = useTranslation();
@@ -226,6 +237,7 @@ export function LLMRequestLogsPage() {
                   <TableHead>{t('llm_request_logs.col_token')}</TableHead>
                   <TableHead>{t('llm_request_logs.col_account')}</TableHead>
                   <TableHead>{t('llm_request_logs.col_group')}</TableHead>
+                  <TableHead>{t('llm_request_logs.col_channel')}</TableHead>
                   <TableHead>{t('llm_request_logs.col_request')}</TableHead>
                   <TableHead>{t('llm_request_logs.col_type')}</TableHead>
                   <TableHead>{t('llm_request_logs.col_model')}</TableHead>
@@ -261,6 +273,17 @@ export function LLMRequestLogsPage() {
                       {entry.group ? <span className={styles.pill}>{entry.group}</span> : '-'}
                     </TableCell>
                     <TableCell>
+                      {entry.channel ? (
+                        <span className={styles.pill}>
+                          {channelLabelKey(entry.channel)
+                            ? t(channelLabelKey(entry.channel))
+                            : entry.channel}
+                        </span>
+                      ) : (
+                        '-'
+                      )}
+                    </TableCell>
+                    <TableCell>
                       <span className={styles.pill}>
                         {t(requestClassLabelKey(entry.request_class))}
                       </span>
@@ -293,7 +316,9 @@ export function LLMRequestLogsPage() {
                     <TableCell>
                       {entry.has_thinking ? (
                         <span className={styles.ok}>
-                          {t('llm_request_logs.thinking_yes', { length: entry.thinking_len })}
+                          {entry.thinking_len > 0
+                            ? t('llm_request_logs.thinking_yes', { length: entry.thinking_len })
+                            : t('llm_request_logs.thinking_yes_plain')}
                         </span>
                       ) : (
                         <span className={styles.muted}>{t('llm_request_logs.thinking_no')}</span>
@@ -358,6 +383,9 @@ export function LLMRequestLogsPage() {
                 {
                   ...detailEntry,
                   request_class: t(requestClassLabelKey(detailEntry.request_class)),
+                  channel: channelLabelKey(detailEntry.channel)
+                    ? t(channelLabelKey(detailEntry.channel))
+                    : detailEntry.channel || '-',
                 },
                 null,
                 2,

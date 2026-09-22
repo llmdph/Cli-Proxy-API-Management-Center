@@ -87,6 +87,10 @@
   color: var(--danger-color);
 }
 
+.segmentDownrank.segmentActive {
+  color: var(--amber-text);
+}
+
 /* ---------- 排序 ---------- */
 
 .sort {

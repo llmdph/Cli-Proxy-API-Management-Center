@@ -13,6 +13,7 @@ export interface LLMRequestLogEntry {
   group: string;
   type: string;
   request_class: string;
+  channel: string;
   model: string;
   latency_ms: number;
   ttft_ms: number;
@@ -71,6 +72,7 @@ const normalizeEntry = (value: unknown): LLMRequestLogEntry | null => {
     group: stringValue(value.group),
     type: stringValue(value.type),
     request_class: stringValue(value.request_class) || 'normal',
+    channel: stringValue(value.channel),
     model: stringValue(value.model),
     latency_ms: numberValue(value.latency_ms),
     ttft_ms: numberValue(value.ttft_ms),

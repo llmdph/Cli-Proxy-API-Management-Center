@@ -105,13 +105,14 @@ export function AuthFilesToolbar(props: AuthFilesToolbarProps) {
         {statusFilterOptions.map((option) => {
           const isActive = statusFilterMode === option.value;
           const isProblem = option.value === 'problem';
+          const isDownrank = option.value === 'downrank';
           return (
             <button
               key={option.value}
               type="button"
               className={`${styles.segment} ${isActive ? styles.segmentActive : ''} ${
                 isProblem ? styles.segmentProblem : ''
-              }`}
+              } ${isDownrank ? styles.segmentDownrank : ''}`}
               aria-pressed={isActive}
               onClick={() => onStatusFilterChange(option.value)}
             >

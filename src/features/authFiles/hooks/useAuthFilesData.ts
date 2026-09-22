@@ -11,6 +11,7 @@ import {
   getTypeLabel,
   isProblemAuthFile,
   isRuntimeOnlyAuthFile,
+  isXAIAuthFile,
   normalizeProviderKey,
   supportsAuthFileManualRefresh,
 } from '@/features/authFiles/constants';
@@ -48,6 +49,8 @@ export type UseAuthFilesDataResult = {
   deletingAll: boolean;
   statusUpdating: Record<string, boolean>;
   manualRefreshing: Record<string, boolean>;
+  thinkProbing: Record<string, boolean>;
+  thinkProbeRunning: boolean;
   batchStatusUpdating: boolean;
   fileInputRef: RefObject<HTMLInputElement | null>;
   loadFiles: (options?: LoadFilesOptions) => Promise<void>;
@@ -57,6 +60,7 @@ export type UseAuthFilesDataResult = {
   handleDeleteAll: (options: DeleteAllOptions) => void;
   handleDownload: (name: string) => Promise<void>;
   handleManualRefresh: (item: AuthFileItem) => Promise<void>;
+  handleThinkProbe: (names: string[]) => Promise<void>;
   handleStatusToggle: (item: AuthFileItem, enabled: boolean) => Promise<void>;
   toggleSelect: (name: string) => void;
   selectAllVisible: (visibleFiles: AuthFileItem[]) => void;
@@ -81,12 +85,15 @@ export function useAuthFilesData(options?: UseAuthFilesDataOptions): UseAuthFile
   const [deletingAll, setDeletingAll] = useState(false);
   const [statusUpdating, setStatusUpdating] = useState<Record<string, boolean>>({});
   const [manualRefreshing, setManualRefreshing] = useState<Record<string, boolean>>({});
+  const [thinkProbing, setThinkProbing] = useState<Record<string, boolean>>({});
+  const [thinkProbeRunning, setThinkProbeRunning] = useState(false);
   const [batchStatusUpdating, setBatchStatusUpdating] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadPendingRef = useRef(false);
   const manualRefreshPendingRef = useRef<Set<string>>(new Set());
+  const thinkProbePendingRef = useRef(false);
   const batchStatusPendingRef = useRef(false);
   /** 列表请求代号：变更操作会使在途响应过期，防止旧轮询复活已删/已改文件。 */
   const loadRequestIdRef = useRef(0);
@@ -523,6 +530,72 @@ export function useAuthFilesData(options?: UseAuthFilesDataOptions): UseAuthFile
     [showNotification, t]
   );
 
+
+  const handleThinkProbe = useCallback(
+    async (names: string[]) => {
+      if (thinkProbePendingRef.current) {
+        showNotification(t('auth_files.think_probe_busy'), 'info');
+        return;
+      }
+      const targets = Array.from(
+        new Set(
+          names
+            .map((name) => name.trim())
+            .filter(Boolean)
+        )
+      ).filter((name) => {
+        const file = files.find((item) => item.name === name);
+        return file ? isXAIAuthFile(file) && !isRuntimeOnlyAuthFile(file) : true;
+      });
+      if (targets.length === 0) {
+        showNotification(t('auth_files.think_probe_none'), 'info');
+        return;
+      }
+
+      thinkProbePendingRef.current = true;
+      setThinkProbeRunning(true);
+      setThinkProbing(Object.fromEntries(targets.map((name) => [name, true])));
+
+      const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+      try {
+        await authFilesApi.startThinkProbe(targets);
+        showNotification(t('auth_files.think_probe_started', { count: targets.length }), 'info');
+        let status = await authFilesApi.getThinkProbe();
+        while (status.running) {
+          await sleep(1000);
+          status = await authFilesApi.getThinkProbe();
+          const current = typeof status.current === 'string' ? status.current : '';
+          const finished = new Set((status.results ?? []).map((item) => item.name));
+          setThinkProbing(
+            Object.fromEntries(
+              targets
+                .filter((name) => !finished.has(name) || name === current)
+                .map((name) => [name, true])
+            )
+          );
+        }
+        notifyAuthFilesChanged();
+        await loadFiles({ background: true });
+        showNotification(
+          t('auth_files.think_probe_done', {
+            restored: status.restored ?? 0,
+            marked: status.marked ?? 0,
+            failed: status.failed ?? 0,
+          }),
+          (status.failed ?? 0) > 0 ? 'error' : 'success'
+        );
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : t('notification.update_failed');
+        showNotification(t('auth_files.think_probe_failed', { message }), 'error');
+      } finally {
+        thinkProbePendingRef.current = false;
+        setThinkProbeRunning(false);
+        setThinkProbing({});
+      }
+    },
+    [files, loadFiles, showNotification, t]
+  );
+
   const handleStatusToggle = useCallback(
     async (item: AuthFileItem, enabled: boolean) => {
       const name = item.name;
@@ -749,6 +822,8 @@ export function useAuthFilesData(options?: UseAuthFilesDataOptions): UseAuthFile
     deletingAll,
     statusUpdating,
     manualRefreshing,
+    thinkProbing,
+    thinkProbeRunning,
     batchStatusUpdating,
     fileInputRef,
     loadFiles,
@@ -758,6 +833,7 @@ export function useAuthFilesData(options?: UseAuthFilesDataOptions): UseAuthFile
     handleDeleteAll,
     handleDownload,
     handleManualRefresh,
+    handleThinkProbe,
     handleStatusToggle,
     toggleSelect,
     selectAllVisible,

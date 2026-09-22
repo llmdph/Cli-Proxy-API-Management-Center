@@ -8,6 +8,7 @@ export type VaultHeaderProps = {
   totalCount: number;
   activeCount: number;
   problemCount: number;
+  downrankCount: number;
   loading: boolean;
   refreshing: boolean;
   uploading: boolean;
@@ -25,6 +26,7 @@ export function VaultHeader(props: VaultHeaderProps) {
     totalCount,
     activeCount,
     problemCount,
+    downrankCount,
     loading,
     refreshing,
     uploading,
@@ -58,6 +60,16 @@ export function VaultHeader(props: VaultHeaderProps) {
               </span>
               <span className={styles.metaProblem}>
                 {t('auth_files.meta_problem', { count: problemCount })}
+              </span>
+            </>
+          )}
+          {downrankCount > 0 && (
+            <>
+              <span className={styles.metaDot} aria-hidden="true">
+                ·
+              </span>
+              <span className={styles.metaDownrank}>
+                {t('auth_files.meta_downrank', { count: downrankCount })}
               </span>
             </>
           )}

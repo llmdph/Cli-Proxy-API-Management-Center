@@ -136,6 +136,21 @@ export const isProblemAuthFile = (file: AuthFileItem): boolean => {
   return file.unavailable === true || status === 'error' || hasAuthFileStatusWarning(file);
 };
 
+const DOWNRANK_TRUTHY = new Set(['1', 'true', 'yes']);
+
+/** Whether this credential is currently marked as xAI degraded. */
+export const isXAIAuthFile = (file: AuthFileItem): boolean =>
+  normalizeProviderKey(String(file.type ?? file.provider ?? '')) === 'xai';
+
+export const isDownrankAuthFile = (file: AuthFileItem): boolean => {
+  if (file.xaiDownrankPool === true) return true;
+  const raw = file['xai_downrank_pool'];
+  if (raw === true) return true;
+  if (typeof raw === 'number') return raw !== 0;
+  if (typeof raw === 'string') return DOWNRANK_TRUTHY.has(raw.trim().toLowerCase());
+  return false;
+};
+
 export const getTypeLabel = (t: TFunction, type: string): string => {
   const providerKey = normalizeProviderKey(type);
   const key = `auth_files.filter_${providerKey}`;
