@@ -36,7 +36,6 @@ import { ConnectivityStatusIcon } from './ConnectivityStatusIcon';
 import { ApiKeyEntriesEditor } from './ApiKeyEntriesEditor';
 import { ModelEntriesEditor } from './ModelEntriesEditor';
 import styles from './sharedForm.module.scss';
-import { CLAUDE_API_BASE_URL } from '../../claudeApi';
 import { MAX_CREDENTIAL_WEIGHT } from '@/utils/credentialWeight';
 
 /** 模块级常量，免得每次渲染都给 picker 一个新数组引用。 */
@@ -59,6 +58,7 @@ const emptyApiKeyEntry = (): ApiKeyEntryInput => ({
   proxyUrl: '',
   weight: undefined,
 });
+const META_API_BASE_URL = 'https://api.meta.ai/v1';
 const XAI_API_BASE_URL = 'https://api.x.ai/v1';
 
 const stripDisableAllRule = (list?: string[]): string[] =>
@@ -69,8 +69,7 @@ const formatJsonObject = (value?: Record<string, unknown>): string => {
   return JSON.stringify(value, null, 2);
 };
 
-const isClaudeLikeBrand = (brand: ProviderBrand): boolean =>
-  brand === 'claude' || brand === 'claudeApi';
+const isClaudeLikeBrand = (brand: ProviderBrand): boolean => brand === 'claude';
 
 function buildInitialForm(
   brand: ProviderBrand,
@@ -81,8 +80,7 @@ function buildInitialForm(
     return {
       apiKey: '',
       name: '',
-      baseUrl:
-        brand === 'claudeApi' ? CLAUDE_API_BASE_URL : brand === 'xai' ? XAI_API_BASE_URL : '',
+      baseUrl: brand === 'meta' ? META_API_BASE_URL : brand === 'xai' ? XAI_API_BASE_URL : '',
       proxyUrl: '',
       prefix: '',
       disabled: false,
@@ -96,10 +94,11 @@ function buildInitialForm(
       cloak: isClaudeLikeBrand(brand)
         ? { mode: '', strictMode: false, sensitiveWordsText: '', cacheUserId: false }
         : undefined,
-      experimentalCchSigning: isClaudeLikeBrand(brand) ? false : undefined,
+      fingerprintProfile: isClaudeLikeBrand(brand) ? '' : undefined,
       testModel:
         brand === 'openaiCompatibility' ||
         brand === 'codex' ||
+        brand === 'meta' ||
         brand === 'xai' ||
         isClaudeLikeBrand(brand) ||
         brand === 'gemini' ||
@@ -193,11 +192,12 @@ function buildInitialForm(
           cacheUserId: (cfg as ProviderKeyConfig).cloak?.cacheUserId === true,
         }
       : undefined,
-    experimentalCchSigning: isClaudeLikeBrand(brand)
-      ? (cfg as ProviderKeyConfig).experimentalCchSigning === true
+    fingerprintProfile: isClaudeLikeBrand(brand)
+      ? ((cfg as ProviderKeyConfig).fingerprintProfile ?? '')
       : undefined,
     testModel:
       brand === 'codex' ||
+      brand === 'meta' ||
       brand === 'xai' ||
       isClaudeLikeBrand(brand) ||
       brand === 'gemini' ||
@@ -482,12 +482,13 @@ export function BaseProviderForm({
     brand === 'gemini' ||
     brand === 'interactions' ||
     brand === 'codex' ||
+    brand === 'meta' ||
     brand === 'xai' ||
     isClaudeLikeBrand(brand) ||
     brand === 'openaiCompatibility';
   const supportsModelImage = brand === 'openaiCompatibility';
   const singleConnectivity =
-    brand === 'codex' || brand === 'xai'
+    brand === 'codex' || brand === 'meta' || brand === 'xai'
       ? { status: connectivity.codexStatus, run: connectivity.runCodex }
       : brand === 'gemini' || brand === 'interactions'
         ? { status: connectivity.geminiStatus, run: connectivity.runGemini }
@@ -675,6 +676,7 @@ export function BaseProviderForm({
             <label className={styles.label} htmlFor={`${fid}-testModel`}>
               {t('providersPage.form.testModel')}
               {brand === 'codex' ||
+              brand === 'meta' ||
               brand === 'xai' ||
               isClaudeLikeBrand(brand) ||
               brand === 'gemini' ||
@@ -937,6 +939,34 @@ export function BaseProviderForm({
         </Collapsible>
       ) : null}
 
+      {isClaudeLikeBrand(brand) ? (
+        <div className={styles.field}>
+          <label id={`${fid}-fingerprint-profile-label`} className={styles.label}>
+            {t('providersPage.form.fingerprintProfile')}
+          </label>
+          <Select
+            id={`${fid}-fingerprint-profile`}
+            value={form.fingerprintProfile ?? ''}
+            options={[
+              {
+                value: '',
+                label: t('providersPage.form.fingerprintProfileDefault'),
+              },
+              {
+                value: 'claude-code-cli',
+                label: t('providersPage.form.fingerprintProfileClaudeCodeCli'),
+              },
+            ]}
+            onChange={(value) => updateField('fingerprintProfile', value)}
+            disabled={mutating}
+            ariaLabelledBy={`${fid}-fingerprint-profile-label`}
+          />
+          <small className={styles.labelHint}>
+            {t('providersPage.form.fingerprintProfileHint')}
+          </small>
+        </div>
+      ) : null}
+
       {descriptor.supportsCloak && form.cloak ? (
         <Collapsible label={t('providersPage.form.cloakSection')}>
           <div className={styles.section}>
@@ -973,19 +1003,6 @@ export function BaseProviderForm({
               <span className={styles.checkboxText}>
                 <span>{t('providersPage.form.cloakCacheUserId')}</span>
                 <small>{t('providersPage.form.cloakCacheUserIdHint')}</small>
-              </span>
-            </label>
-            <label className={styles.checkboxRow}>
-              <input
-                type="checkbox"
-                className={styles.checkboxBox}
-                checked={form.experimentalCchSigning ?? false}
-                disabled={mutating}
-                onChange={(e) => updateField('experimentalCchSigning', e.target.checked)}
-              />
-              <span className={styles.checkboxText}>
-                <span>{t('providersPage.form.experimentalCchSigning')}</span>
-                <small>{t('providersPage.form.experimentalCchSigningHint')}</small>
               </span>
             </label>
             <div className={styles.field}>

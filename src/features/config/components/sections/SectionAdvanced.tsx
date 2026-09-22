@@ -22,7 +22,7 @@ import { StringListEditor } from '../blocks/StringListEditor';
 
 const Icon = CONFIG_TAB_ICONS.advanced;
 
-/** 06 高级与实验：插件源（只存 env 变量名）、签名缓存、Claude/Codex 请求头默认值。 */
+/** 06 高级与实验：插件源、供应商敏感词、签名缓存与请求头默认值。 */
 export function SectionAdvanced({ values, disabled, animateIn, onChange }: ConfigSectionProps) {
   const { t } = useTranslation();
 
@@ -32,6 +32,14 @@ export function SectionAdvanced({ values, disabled, animateIn, onChange }: Confi
   );
   const handlePluginStoreAuthChange = useCallback(
     (pluginStoreAuth: PluginStoreAuthRule[]) => onChange({ pluginStoreAuth }),
+    [onChange]
+  );
+  const handleAntigravitySensitiveWordsChange = useCallback(
+    (antigravitySensitiveWords: string[]) => onChange({ antigravitySensitiveWords }),
+    [onChange]
+  );
+  const handleDevinSensitiveWordsChange = useCallback(
+    (devinSensitiveWords: string[]) => onChange({ devinSensitiveWords }),
     [onChange]
   );
 
@@ -106,37 +114,106 @@ export function SectionAdvanced({ values, disabled, animateIn, onChange }: Confi
         </Collapsible>
 
         <Collapsible
-          label={t('config_management.visual.sections.advanced.signature_title')}
+          label={t('config_management.visual.sections.advanced.antigravity_title')}
           defaultOpen={false}
         >
-          <FieldGrid>
-            <FieldAnchor fieldId="antigravitySignatureCacheEnabled">
-              <ToggleRow
-                title={t('config_management.visual.sections.system.antigravity_signature_cache')}
+          <FieldStack>
+            <FieldAnchor fieldId="antigravitySensitiveWords">
+              <FieldGroup
+                title={t('config_management.visual.sections.system.antigravity_sensitive_words')}
                 description={t(
-                  'config_management.visual.sections.system.antigravity_signature_cache_desc'
+                  'config_management.visual.sections.system.antigravity_sensitive_words_desc'
                 )}
-                checked={values.antigravitySignatureCacheEnabled}
-                disabled={disabled}
-                onChange={(antigravitySignatureCacheEnabled) =>
-                  onChange({ antigravitySignatureCacheEnabled })
-                }
-              />
+              >
+                <FieldShell
+                  label={t(
+                    'config_management.visual.sections.system.antigravity_sensitive_words_label'
+                  )}
+                  hint={t(
+                    'config_management.visual.sections.system.antigravity_sensitive_words_hint'
+                  )}
+                >
+                  <StringListEditor
+                    value={values.antigravitySensitiveWords}
+                    disabled={disabled}
+                    placeholder={t(
+                      'config_management.visual.sections.system.antigravity_sensitive_words_placeholder'
+                    )}
+                    inputAriaLabel={t(
+                      'config_management.visual.sections.system.antigravity_sensitive_words_label'
+                    )}
+                    onChange={handleAntigravitySensitiveWordsChange}
+                  />
+                </FieldShell>
+              </FieldGroup>
             </FieldAnchor>
-            <FieldAnchor fieldId="antigravitySignatureBypassStrict">
-              <ToggleRow
-                title={t('config_management.visual.sections.system.antigravity_signature_strict')}
+
+            <Divider />
+            <FieldGroupHeading
+              title={t('config_management.visual.sections.advanced.signature_title')}
+            />
+            <FieldGrid>
+              <FieldAnchor fieldId="antigravitySignatureCacheEnabled">
+                <ToggleRow
+                  title={t('config_management.visual.sections.system.antigravity_signature_cache')}
+                  description={t(
+                    'config_management.visual.sections.system.antigravity_signature_cache_desc'
+                  )}
+                  checked={values.antigravitySignatureCacheEnabled}
+                  disabled={disabled}
+                  onChange={(antigravitySignatureCacheEnabled) =>
+                    onChange({ antigravitySignatureCacheEnabled })
+                  }
+                />
+              </FieldAnchor>
+              <FieldAnchor fieldId="antigravitySignatureBypassStrict">
+                <ToggleRow
+                  title={t('config_management.visual.sections.system.antigravity_signature_strict')}
+                  description={t(
+                    'config_management.visual.sections.system.antigravity_signature_strict_desc'
+                  )}
+                  checked={values.antigravitySignatureBypassStrict}
+                  disabled={disabled}
+                  onChange={(antigravitySignatureBypassStrict) =>
+                    onChange({ antigravitySignatureBypassStrict })
+                  }
+                />
+              </FieldAnchor>
+            </FieldGrid>
+          </FieldStack>
+        </Collapsible>
+
+        <Collapsible
+          label={t('config_management.visual.sections.advanced.devin_title')}
+          defaultOpen={false}
+        >
+          <FieldStack>
+            <FieldAnchor fieldId="devinSensitiveWords">
+              <FieldGroup
+                title={t('config_management.visual.sections.system.devin_sensitive_words')}
                 description={t(
-                  'config_management.visual.sections.system.antigravity_signature_strict_desc'
+                  'config_management.visual.sections.system.devin_sensitive_words_desc'
                 )}
-                checked={values.antigravitySignatureBypassStrict}
-                disabled={disabled}
-                onChange={(antigravitySignatureBypassStrict) =>
-                  onChange({ antigravitySignatureBypassStrict })
-                }
-              />
+              >
+                <FieldShell
+                  label={t('config_management.visual.sections.system.devin_sensitive_words_label')}
+                  hint={t('config_management.visual.sections.system.devin_sensitive_words_hint')}
+                >
+                  <StringListEditor
+                    value={values.devinSensitiveWords}
+                    disabled={disabled}
+                    placeholder={t(
+                      'config_management.visual.sections.system.devin_sensitive_words_placeholder'
+                    )}
+                    inputAriaLabel={t(
+                      'config_management.visual.sections.system.devin_sensitive_words_label'
+                    )}
+                    onChange={handleDevinSensitiveWordsChange}
+                  />
+                </FieldShell>
+              </FieldGroup>
             </FieldAnchor>
-          </FieldGrid>
+          </FieldStack>
         </Collapsible>
 
         <Collapsible

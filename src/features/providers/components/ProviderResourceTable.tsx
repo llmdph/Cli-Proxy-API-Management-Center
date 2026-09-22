@@ -133,6 +133,9 @@ export function ProviderResourceTable({
       if (r.brand === 'claude' && r.flags.cloakEnabled) {
         items.push(renderFlagTag('cloak', t('providersPage.table.cloakTag')));
       }
+      if (r.brand === 'claude' && r.flags.claudeCodeCliProfile) {
+        items.push(renderFlagTag('cli-profile', t('providersPage.table.cliProfileTag')));
+      }
     }
     return <div className={styles.metricsCell}>{items}</div>;
   };
