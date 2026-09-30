@@ -27,6 +27,7 @@ import { AuthFileCard } from '@/features/authFiles/components/AuthFileCard';
 import { AuthFileDetailsSheet } from '@/features/authFiles/components/AuthFileDetailsSheet';
 import { AuthFileModelsModal } from '@/features/authFiles/components/AuthFileModelsModal';
 import { AuthFilesToolbar } from '@/features/authFiles/components/AuthFilesToolbar';
+import { Grok47AccountPoolControl } from '@/features/authFiles/components/Grok47AccountPoolControl';
 import { BatchActionBar } from '@/features/authFiles/components/BatchActionBar';
 import { OAuthExcludedCard } from '@/features/authFiles/components/OAuthExcludedCard';
 import { OAuthModelAliasCard } from '@/features/authFiles/components/OAuthModelAliasCard';
@@ -616,6 +617,8 @@ export function AuthFilesPage() {
             setPage(1);
           }}
         />
+
+        {(normalizedFilter === 'all' || normalizedFilter === 'xai') && <Grok47AccountPoolControl />}
 
         <AuthFilesToolbar
           search={search}
